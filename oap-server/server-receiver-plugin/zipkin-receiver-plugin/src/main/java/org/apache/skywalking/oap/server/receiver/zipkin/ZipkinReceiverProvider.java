@@ -26,12 +26,10 @@ import org.apache.skywalking.oap.server.library.module.ModuleStartException;
 import org.apache.skywalking.oap.server.library.module.ServiceNotProvidedException;
 import org.apache.skywalking.oap.server.library.server.ServerException;
 import org.apache.skywalking.oap.server.library.server.jetty.JettyServer;
-import org.apache.skywalking.oap.server.receiver.trace.module.TraceModule;
-import org.apache.skywalking.oap.server.receiver.trace.provider.parser.ISegmentParserService;
-import org.apache.skywalking.oap.server.receiver.zipkin.analysis.Receiver2AnalysisBridge;
-import org.apache.skywalking.oap.server.receiver.zipkin.analysis.transform.Zipkin2SkyWalkingTransfer;
+import org.apache.skywalking.oap.server.library.server.jetty.JettyServerConfig;
 import org.apache.skywalking.oap.server.receiver.zipkin.handler.SpanV1JettyHandler;
 import org.apache.skywalking.oap.server.receiver.zipkin.handler.SpanV2JettyHandler;
+import org.apache.skywalking.oap.server.telemetry.TelemetryModule;
 
 public class ZipkinReceiverProvider extends ModuleProvider {
     public static final String NAME = "default";
@@ -64,19 +62,23 @@ public class ZipkinReceiverProvider extends ModuleProvider {
 
     @Override
     public void start() throws ServiceNotProvidedException, ModuleStartException {
-        jettyServer = new JettyServer(config.getHost(), config.getPort(), config.getContextPath());
+        JettyServerConfig jettyServerConfig = JettyServerConfig.builder()
+                                                               .host(config.getHost())
+                                                               .port(config.getPort())
+                                                               .contextPath(config.getContextPath())
+                                                               .jettyIdleTimeOut(config.getJettyIdleTimeOut())
+                                                               .jettyAcceptorPriorityDelta(
+                                                                   config.getJettyAcceptorPriorityDelta())
+                                                               .jettyMinThreads(config.getJettyMinThreads())
+                                                               .jettyMaxThreads(config.getJettyMaxThreads())
+                                                               .jettyAcceptQueueSize(config.getJettyAcceptQueueSize())
+                                                               .build();
+
+        jettyServer = new JettyServer(jettyServerConfig);
         jettyServer.initialize();
 
         jettyServer.addHandler(new SpanV1JettyHandler(config, getManager()));
         jettyServer.addHandler(new SpanV2JettyHandler(config, getManager()));
-
-        if (config.isNeedAnalysis()) {
-            ISegmentParserService segmentParseService = getManager().find(TraceModule.NAME)
-                                                                    .provider()
-                                                                    .getService(ISegmentParserService.class);
-            Receiver2AnalysisBridge bridge = new Receiver2AnalysisBridge(segmentParseService);
-            Zipkin2SkyWalkingTransfer.INSTANCE.addListener(bridge);
-        }
     }
 
     @Override
@@ -90,13 +92,9 @@ public class ZipkinReceiverProvider extends ModuleProvider {
 
     @Override
     public String[] requiredModules() {
-        if (config.isNeedAnalysis()) {
-            return new String[] {TraceModule.NAME};
-        } else {
-            /**
-             * In pure trace status, we don't need the trace receiver.
-             */
-            return new String[] {CoreModule.NAME};
-        }
+        return new String[] {
+            TelemetryModule.NAME,
+            CoreModule.NAME
+        };
     }
 }

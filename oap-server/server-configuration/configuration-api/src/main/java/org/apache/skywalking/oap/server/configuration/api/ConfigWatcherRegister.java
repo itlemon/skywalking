@@ -33,7 +33,7 @@ import org.slf4j.LoggerFactory;
  * The default implementor of Config Watcher register.
  */
 public abstract class ConfigWatcherRegister implements DynamicConfigurationService {
-    private static final Logger logger = LoggerFactory.getLogger(ConfigWatcherRegister.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ConfigWatcherRegister.class);
     public static final String LINE_SEPARATOR = System.getProperty("line.separator", "\n");
 
     private Register register = new Register();
@@ -64,15 +64,14 @@ public abstract class ConfigWatcherRegister implements DynamicConfigurationServi
     public void start() {
         isStarted = true;
 
-        configSync();
-        logger.info("Current configurations after the bootstrap sync." + LINE_SEPARATOR + register.toString());
+        LOGGER.info("Current configurations after the bootstrap sync." + LINE_SEPARATOR + register.toString());
 
         Executors.newSingleThreadScheduledExecutor()
                  .scheduleAtFixedRate(
                      new RunnableWithExceptionProtection(
                          this::configSync,
-                         t -> logger.error("Sync config center error.", t)
-                     ), syncPeriod, syncPeriod, TimeUnit.SECONDS);
+                         t -> LOGGER.error("Sync config center error.", t)
+                     ), 0, syncPeriod, TimeUnit.SECONDS);
     }
 
     void configSync() {
@@ -105,11 +104,11 @@ public abstract class ConfigWatcherRegister implements DynamicConfigurationServi
                         }
                     }
                 } else {
-                    logger.warn("Config {} from configuration center, doesn't match any watcher, ignore.", itemName);
+                    LOGGER.warn("Config {} from configuration center, doesn't match any watcher, ignore.", itemName);
                 }
             });
 
-            logger.trace("Current configurations after the sync." + LINE_SEPARATOR + register.toString());
+            LOGGER.trace("Current configurations after the sync." + LINE_SEPARATOR + register.toString());
         });
     }
 

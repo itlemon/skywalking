@@ -2,80 +2,89 @@ Changes by Version
 ==================
 Release Notes.
 
-8.0.1
-------------------
-
-#### OAP-Backend
-* Fix `no-init` mode is not working in ElasticSearch storage.
-
-
-8.0.0
+8.7.0
 ------------------
 
 #### Project
-* v3 protocol is added and implemented. All previous releases are incompatible with 8.x releases.
-* Service, Instance, Endpoint register mechanism and inventory storage entities are removed.
-* New GraphQL query protocol is provided, the legacy procotol is still supported(plan to remove at the end of this year).
-* Support Prometheus network protocol. Metrics in Prometheus format could be transferred into SkyWalking.
-* Python agent provided.
-* All inventory caches have been removed.
-* Apache ShardingSphere(4.1.0, 4.1.1) agent plugin provided.
+
+* Extract dependency management to a bom.
+* Add JDK 16 to test matrix.
+* DataCarrier consumer add a new event notification, call `nothingToConsume` method if the queue has no element to
+  consume.
 
 #### Java Agent
-* Add MariaDB plugin.
-* Vert.x plugin enhancement. More cases are covered.
-* Support v3 extension header.
-* Fix ElasticSearch 5.x plugin TransportClient error.
-* Support Correlation protocol v1.
-* Fix Finagle plugin bug, in processing Noop Span.
-* Make `CommandService` daemon to avoid blocking target application shutting down gracefully.
-* Refactor spring cloud gateway plugin and support tracing spring cloud gateway 2.2.x 
+
+* Supports modifying span attributes in async mode.
+* Agent supports the collection of JVM arguments and jar dependency information.
+* [Temporary] Support authentication for log report channel. This feature and grpc channel is going to be removed after
+  Satellite 0.2.0 release.
+* Remove deprecated gRPC method, `io.grpc.ManagedChannelBuilder#nameResolverFactory`.
+  See [gRPC-java 7133](https://github.com/grpc/grpc-java/issues/7133) for more details.
+* Add `Neo4j-4.x` plugin.
+* Correct `profile.duration` to `profile.max_duration` in the default `agent.config` file.
+* Fix the response time of gRPC.
+* Support parameter collection for SqlServer.
+* Add `ShardingSphere-5.0.0-beta` plugin.
+* Fix some method exception error.
+* Fix async finish repeatedly in `spring-webflux-5.x-webclient` plugin.
+* Add agent plugin to support Sentinel.
+* Move `ehcache-2.x` plugin as an optional plugin.
 
 #### OAP-Backend
-* Support meter system for Prometheus adoption. In future releases, we will add native meter APIs and MicroMeter(Sleuth) system.
-* Support endpoint grouping.
-* Add **SuperDataSet** annotation for storage entity. 
-* Add **superDatasetIndexShardsFactor** in the ElasticSearch storage, to provide more shards for @SuperDataSet annotated entites. Typically TraceSegment.
-* Support alarm settings for relationship of service, instance, and endpoint level metrics.
-* Support alarm settings for database(conjecture node in tracing scenario).
-* Data Model could be added in the runtime, don't depend on the bootstrap sequence anymore.
-* Reduce the memory cost, due to no inventory caches.
-* No buffer files in tracing and service mesh cases.
-* New ReadWriteSafe cache implementation. Simplify codes.
-* Provide default way for metrics query, even the metrics doesn't exist.
-* New GraphQL query protocol is provided. Support the metrics type query.
-* Set up length rule of service, instance, and endpoint.
-* Adjust the default jks for ElasticSearch to empty.
-* Fix Apdex function integer overflow issue. 
-* Fix profile storage issue.
-* Fix TTL issue.
-* Fix H2 column type bug.
-* Add JRE 8-14 test for the backend. 
+
+* Disable Spring sleuth meter analyzer by default.
+* Only count 5xx as error in Envoy ALS receiver.
+* Upgrade apollo core caused by CVE-2020-15170.
+* Upgrade kubernetes client caused by CVE-2020-28052.
+* Upgrade Elasticsearch 7 client caused by CVE-2020-7014.
+* Upgrade jackson related libs caused by CVE-2018-11307, CVE-2018-14718 ~ CVE-2018-14721, CVE-2018-19360 ~
+  CVE-2018-19362, CVE-2019-14379, CVE-2019-14540, CVE-2019-14892, CVE-2019-14893, CVE-2019-16335, CVE-2019-16942,
+  CVE-2019-16943, CVE-2019-17267, CVE-2019-17531, CVE-2019-20330, CVE-2020-8840, CVE-2020-9546, CVE-2020-9547,
+  CVE-2020-9548, CVE-2018-12022, CVE-2018-12023, CVE-2019-12086, CVE-2019-14439, CVE-2020-10672, CVE-2020-10673,
+  CVE-2020-10968, CVE-2020-10969, CVE-2020-11111, CVE-2020-11112, CVE-2020-11113, CVE-2020-11619, CVE-2020-11620,
+  CVE-2020-14060, CVE-2020-14061, CVE-2020-14062, CVE-2020-14195, CVE-2020-24616, CVE-2020-24750, CVE-2020-25649,
+  CVE-2020-35490, CVE-2020-35491, CVE-2020-35728 and CVE-2020-36179 ~ CVE-2020-36190.
+* Exclude log4j 1.x caused by CVE-2019-17571.
+* Upgrade log4j 2.x caused by CVE-2020-9488.
+* Upgrade nacos libs caused by CVE-2021-29441 and CVE-2021-29442.
+* Upgrade netty caused by CVE-2019-20444, CVE-2019-20445, CVE-2019-16869, CVE-2020-11612, CVE-2021-21290, CVE-2021-21295
+  and CVE-2021-21409.
+* Upgrade consul client caused by CVE-2018-1000844, CVE-2018-1000850.
+* Upgrade zookeeper caused by CVE-2019-0201, zookeeper cluster coordinator plugin now requires zookeeper server 3.5+.
+* Upgrade snake yaml caused by CVE-2017-18640.
+* Upgrade embed tomcat caused by CVE-2020-13935.
+* Upgrade commons-lang3 to avoid potential NPE in some JDK versions.
+* OAL supports generating metrics from events.
+* Support endpoint name grouping by OpenAPI definitions.
+* Concurrent create PrepareRequest when persist Metrics
+* Fix CounterWindow increase computing issue.
+* Performance: optimize Envoy ALS analyzer performance in high traffic load scenario (reduce ~1cpu in ~10k RPS).
+* Performance: trim useless metadata fields in Envoy ALS metadata to improve performance.
+* Fix: slowDBAccessThreshold dynamic config error when not configured.
+* Performance: cache regex pattern and result, optimize string concatenation in Envy ALS analyzer.
+* Performance: cache metrics id and entity id in `Metrics` and `ISource`.
+* Performance: enhance persistent session mechanism, about differentiating cache timeout for different dimensionality
+  metrics. The timeout of the cache for minute and hour level metrics has been prolonged to ~5 min.
+* Performance: Add L1 aggregation flush period, which reduce the CPU load and help young GC.
+* Support connectTimeout and socketTimeout settings for ElasticSearch6 and ElasticSearch7 storages.
+* Re-implement storage session mechanism, cached metrics are removed only according to their last access timestamp,
+  rather than first time. This makes sure hot data never gets removed unexpectedly.
+* Support session expired threshold configurable. 
+* Fix InfluxDB storage-plugin Metrics#multiGet issue.
+* Replace zuul proxy with spring cloud gateway 2.x. in webapp module.
 
 #### UI
-* UI dashboard is 100% configurable to adopt new metrics definited in the backend.
 
-#### Document
-* Add v8 upgrade document.
-* Make the coverage accurate including UT and e2e tests.
-* Add miss doc about collecting parameters in the profiled traces.
+* Fix the date component for log conditions.
+* Fix selector keys for duplicate options.
+* Add Python celery plugin.
+* Fix default config for metrics.
+* Fix trace table for profile ui.
+* Fix the error of server response time in the topology.
 
-#### CVE
-* Fix SQL Injection vulnerability in H2/MySQL implementation.
-* Upgrade Nacos to avoid the FastJson CVE in high frequency.
-* Upgrade jasckson-databind to 2.9.10. 
+#### Documentation
 
+All issues and pull requests are [here](https://github.com/apache/skywalking/milestone/90?closed=1)
 
-All issues and pull requests are [here](https://github.com/apache/skywalking/milestone/45?closed=1)
-
-7.0.0 release
 ------------------
-You could find all CHANGES of 7.0.0 at [here](https://github.com/apache/skywalking/blob/v7.0.0/CHANGES.md)
-
-6.x releases
-------------------
-You could find all CHANGES of 6.x at [here](https://github.com/apache/skywalking/blob/6.x/CHANGES.md)
-
-5.x releases
-------------------
-You could find all CHANGES of 5.x at [here](https://github.com/apache/skywalking/blob/5.x/CHANGES.md)
+Find change logs of all versions [here](changes).

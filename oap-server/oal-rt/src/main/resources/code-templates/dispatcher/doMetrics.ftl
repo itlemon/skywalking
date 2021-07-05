@@ -1,14 +1,14 @@
 private void do${metricsName}(${sourcePackage}${sourceName} source) {
-${metricsClassPackage}${metricsName}Metrics metrics = new ${metricsClassPackage}${metricsName}Metrics();
 
 <#if filterExpressions??>
     <#list filterExpressions as filterExpression>
-        if (!new org.apache.skywalking.oap.server.core.analysis.metrics.expression.${filterExpression.expressionObject}().match(${filterExpression.left}, ${filterExpression.right})) {
+        if (!new ${filterExpression.expressionObject}().match(${filterExpression.left}, ${filterExpression.right})) {
         return;
         }
     </#list>
 </#if>
 
+${metricsClassPackage}${metricsName}Metrics metrics = new ${metricsClassPackage}${metricsName}Metrics();
 metrics.setTimeBucket(source.getTimeBucket());
 <#list fieldsFromSource as field>
     metrics.${field.fieldSetter}(source.${field.fieldGetter}());
@@ -18,7 +18,7 @@ metrics.${entryMethod.methodName}(
     <#if entryMethod.argTypes[arg_index] < 3>
         ${arg}
     <#else>
-        new org.apache.skywalking.oap.server.core.analysis.metrics.expression.${arg.expressionObject}().match(${arg.left}, ${arg.right})
+        new ${arg.expressionObject}().match(${arg.left}, ${arg.right})
     </#if><#if arg_has_next>, </#if>
 </#list>);
 

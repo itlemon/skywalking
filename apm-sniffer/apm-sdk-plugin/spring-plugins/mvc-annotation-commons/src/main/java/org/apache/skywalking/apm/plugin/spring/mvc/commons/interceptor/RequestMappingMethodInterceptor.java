@@ -31,15 +31,11 @@ import java.lang.reflect.Method;
 public class RequestMappingMethodInterceptor extends AbstractMethodInterceptor {
     @Override
     public String getRequestURL(Method method) {
-        return ParsePathUtil.recursiveParseMethodAnnotaion(method, m -> {
+        return ParsePathUtil.recursiveParseMethodAnnotation(method, m -> {
             String requestURL = null;
             RequestMapping methodRequestMapping = AnnotationUtils.getAnnotation(m, RequestMapping.class);
             if (methodRequestMapping != null) {
-                if (methodRequestMapping.value().length > 0) {
-                    requestURL = methodRequestMapping.value()[0];
-                } else if (methodRequestMapping.path().length > 0) {
-                    requestURL = methodRequestMapping.path()[0];
-                }
+                requestURL = methodRequestMapping.value().length > 0 ? methodRequestMapping.value()[0] : "";
             }
             return requestURL;
         });
@@ -47,7 +43,7 @@ public class RequestMappingMethodInterceptor extends AbstractMethodInterceptor {
 
     @Override
     public String getAcceptedMethodTypes(Method method) {
-        return ParsePathUtil.recursiveParseMethodAnnotaion(method, m -> {
+        return ParsePathUtil.recursiveParseMethodAnnotation(method, m -> {
             RequestMapping methodRequestMapping = AnnotationUtils.getAnnotation(m, RequestMapping.class);
             if (methodRequestMapping == null || methodRequestMapping.method().length == 0) {
                 return null;

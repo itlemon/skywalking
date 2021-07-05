@@ -31,7 +31,7 @@ import org.apache.skywalking.apm.agent.core.logging.api.ILog;
  * byte-buddy and sky-walking plugin.
  */
 public class ConstructorInter {
-    private static final ILog logger = LogManager.getLogger(ConstructorInter.class);
+    private static final ILog LOGGER = LogManager.getLogger(ConstructorInter.class);
 
     /**
      * An {@link InstanceConstructorInterceptor} This name should only stay in {@link String}, the real {@link Class}
@@ -47,7 +47,7 @@ public class ConstructorInter {
         try {
             interceptor = InterceptorInstanceLoader.load(constructorInterceptorClassName, classLoader);
         } catch (Throwable t) {
-            throw new PluginException("Can't create InstanceConstructorInterceptor.", t);
+            throw new PluginException("Can't create InstanceConstructorInterceptorV2.", t);
         }
     }
 
@@ -64,7 +64,7 @@ public class ConstructorInter {
 
             interceptor.onConstruct(targetObject, allArguments);
         } catch (Throwable t) {
-            logger.error("ConstructorInter failure.", t);
+            LOGGER.error("ConstructorInter failure.", t);
         }
 
     }

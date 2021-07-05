@@ -27,6 +27,11 @@ import org.apache.skywalking.apm.network.language.agent.v3.SegmentReference;
 import org.apache.skywalking.apm.network.language.agent.v3.SpanLayer;
 import org.apache.skywalking.apm.network.language.agent.v3.SpanObject;
 import org.apache.skywalking.apm.network.language.agent.v3.SpanType;
+import org.apache.skywalking.oap.server.analyzer.provider.AnalyzerModuleConfig;
+import org.apache.skywalking.oap.server.analyzer.provider.trace.UninstrumentedGatewaysConfig;
+import org.apache.skywalking.oap.server.analyzer.provider.trace.parser.SpanTags;
+import org.apache.skywalking.oap.server.analyzer.provider.trace.parser.listener.AnalysisListener;
+import org.apache.skywalking.oap.server.analyzer.provider.trace.parser.listener.MultiScopesAnalysisListener;
 import org.apache.skywalking.oap.server.core.Const;
 import org.apache.skywalking.oap.server.core.analysis.IDManager;
 import org.apache.skywalking.oap.server.core.analysis.NodeType;
@@ -38,15 +43,12 @@ import org.apache.skywalking.oap.server.core.source.All;
 import org.apache.skywalking.oap.server.core.source.DatabaseAccess;
 import org.apache.skywalking.oap.server.core.source.Endpoint;
 import org.apache.skywalking.oap.server.core.source.EndpointRelation;
+import org.apache.skywalking.oap.server.core.source.ISource;
 import org.apache.skywalking.oap.server.core.source.Service;
 import org.apache.skywalking.oap.server.core.source.ServiceInstance;
 import org.apache.skywalking.oap.server.core.source.ServiceInstanceRelation;
 import org.apache.skywalking.oap.server.core.source.ServiceMeta;
 import org.apache.skywalking.oap.server.core.source.ServiceRelation;
-import org.apache.skywalking.oap.server.core.source.Source;
-import org.apache.skywalking.oap.server.receiver.trace.provider.TraceServiceModuleConfig;
-import org.apache.skywalking.oap.server.receiver.trace.provider.UninstrumentedGatewaysConfig;
-import org.apache.skywalking.oap.server.receiver.trace.provider.parser.SpanTags;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -54,7 +56,7 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
-import static org.apache.skywalking.oap.server.receiver.trace.provider.parser.SpanTags.LOGIC_ENDPOINT;
+import static org.apache.skywalking.oap.server.analyzer.provider.trace.parser.SpanTags.LOGIC_ENDPOINT;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.when;
 
@@ -66,7 +68,7 @@ import static org.mockito.Mockito.when;
  */
 public class MultiScopesAnalysisListenerTest {
     @Mock
-    private static TraceServiceModuleConfig CONFIG;
+    private static AnalyzerModuleConfig CONFIG;
     @Mock
     private static NetworkAddressAliasCache CACHE;
     @Mock
@@ -145,7 +147,7 @@ public class MultiScopesAnalysisListenerTest {
         listener.parseEntry(spanObject, segment);
         listener.build();
 
-        final List<Source> receivedSources = mockReceiver.getReceivedSources();
+        final List<ISource> receivedSources = mockReceiver.getReceivedSources();
         Assert.assertEquals(7, receivedSources.size());
         final All all = (All) receivedSources.get(0);
         final Service service = (Service) receivedSources.get(1);
@@ -188,6 +190,10 @@ public class MultiScopesAnalysisListenerTest {
                                           .setIsError(true)
                                           .setSpanType(SpanType.Entry)
                                           .setSpanLayer(SpanLayer.RPCFramework)
+                                          .addTags(KeyStringValuePair.newBuilder()
+                                                                     .setKey("http.method")
+                                                                     .setValue("GET")
+                                                                     .build())
                                           .addRefs(
                                               SegmentReference.newBuilder()
                                                               .setRefType(RefType.CrossProcess)
@@ -206,7 +212,7 @@ public class MultiScopesAnalysisListenerTest {
         listener.parseEntry(spanObject, segment);
         listener.build();
 
-        final List<Source> receivedSources = mockReceiver.getReceivedSources();
+        final List<ISource> receivedSources = mockReceiver.getReceivedSources();
         Assert.assertEquals(7, receivedSources.size());
         final All all = (All) receivedSources.get(0);
         final Service service = (Service) receivedSources.get(1);
@@ -224,6 +230,11 @@ public class MultiScopesAnalysisListenerTest {
         Assert.assertEquals(serviceInstance.getName(), serviceInstanceRelation.getDestServiceInstanceName());
         Assert.assertEquals("downstream-endpoint", endpointRelation.getEndpoint());
         Assert.assertEquals(endpoint.getName(), endpointRelation.getChildEndpoint());
+        // tags test
+        Assert.assertEquals("http.method:GET", all.getTags().get(0));
+        Assert.assertEquals("http.method:GET", service.getTags().get(0));
+        Assert.assertEquals("http.method:GET", serviceInstance.getTags().get(0));
+        Assert.assertEquals("http.method:GET", endpoint.getTags().get(0));
     }
 
     /**
@@ -265,7 +276,7 @@ public class MultiScopesAnalysisListenerTest {
         listener.parseEntry(spanObject, segment);
         listener.build();
 
-        final List<Source> receivedSources = mockReceiver.getReceivedSources();
+        final List<ISource> receivedSources = mockReceiver.getReceivedSources();
         Assert.assertEquals(7, receivedSources.size());
         final All all = (All) receivedSources.get(0);
         final Service service = (Service) receivedSources.get(1);
@@ -321,7 +332,7 @@ public class MultiScopesAnalysisListenerTest {
         listener.parseLocal(spanObject, segment);
         listener.build();
 
-        final List<Source> receivedSources = mockReceiver.getReceivedSources();
+        final List<ISource> receivedSources = mockReceiver.getReceivedSources();
         Assert.assertEquals(1, receivedSources.size());
         final Endpoint source = (Endpoint) receivedSources.get(0);
         Assert.assertEquals("/logic-call", source.getName());
@@ -366,7 +377,7 @@ public class MultiScopesAnalysisListenerTest {
         listener.parseLocal(spanObject, segment);
         listener.build();
 
-        final List<Source> receivedSources = mockReceiver.getReceivedSources();
+        final List<ISource> receivedSources = mockReceiver.getReceivedSources();
         Assert.assertEquals(1, receivedSources.size());
         final Endpoint source = (Endpoint) receivedSources.get(0);
         Assert.assertEquals("/GraphQL-service", source.getName());
@@ -405,7 +416,7 @@ public class MultiScopesAnalysisListenerTest {
         listener.parseExit(spanObject, segment);
         listener.build();
 
-        final List<Source> receivedSources = mockReceiver.getReceivedSources();
+        final List<ISource> receivedSources = mockReceiver.getReceivedSources();
         Assert.assertEquals(4, receivedSources.size());
         final ServiceRelation serviceRelation = (ServiceRelation) receivedSources.get(0);
         final ServiceInstanceRelation serviceInstanceRelation = (ServiceInstanceRelation) receivedSources.get(1);
@@ -451,7 +462,7 @@ public class MultiScopesAnalysisListenerTest {
         listener.parseExit(spanObject, segment);
         listener.build();
 
-        final List<Source> receivedSources = mockReceiver.getReceivedSources();
+        final List<ISource> receivedSources = mockReceiver.getReceivedSources();
         Assert.assertEquals(2, receivedSources.size());
         final ServiceRelation serviceRelation = (ServiceRelation) receivedSources.get(0);
         final ServiceInstanceRelation serviceInstanceRelation = (ServiceInstanceRelation) receivedSources.get(1);

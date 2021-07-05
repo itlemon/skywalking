@@ -20,21 +20,26 @@ package org.apache.skywalking.oap.server.core.alarm.provider;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Pattern;
-
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.skywalking.apm.util.StringUtil;
 import org.apache.skywalking.oap.server.core.alarm.AlarmMessage;
 import org.apache.skywalking.oap.server.core.alarm.MetaInAlarm;
+import org.apache.skywalking.oap.server.core.analysis.manual.searchtag.Tag;
+import org.apache.skywalking.oap.server.core.analysis.metrics.DataTable;
 import org.apache.skywalking.oap.server.core.analysis.metrics.DoubleValueHolder;
 import org.apache.skywalking.oap.server.core.analysis.metrics.IntValueHolder;
+import org.apache.skywalking.oap.server.core.analysis.metrics.LabeledValueHolder;
 import org.apache.skywalking.oap.server.core.analysis.metrics.LongValueHolder;
 import org.apache.skywalking.oap.server.core.analysis.metrics.Metrics;
 import org.apache.skywalking.oap.server.core.analysis.metrics.MultiIntValuesHolder;
@@ -64,7 +69,13 @@ public class RunningRule {
     private final List<String> excludeNames;
     private final Pattern includeNamesRegex;
     private final Pattern excludeNamesRegex;
+    private final List<String> includeLabels;
+    private final List<String> excludeLabels;
+    private final Pattern includeLabelsRegex;
+    private final Pattern excludeLabelsRegex;
     private final AlarmMessageFormatter formatter;
+    private final boolean onlyAsCondition;
+    private final List<Tag> tags;
 
     public RunningRule(AlarmRule alarmRule) {
         metricsName = alarmRule.getMetricsName();
@@ -87,7 +98,19 @@ public class RunningRule {
             Pattern.compile(alarmRule.getIncludeNamesRegex()) : null;
         this.excludeNamesRegex = StringUtil.isNotEmpty(alarmRule.getExcludeNamesRegex()) ?
             Pattern.compile(alarmRule.getExcludeNamesRegex()) : null;
+        this.includeLabels = alarmRule.getIncludeLabels();
+        this.excludeLabels = alarmRule.getExcludeLabels();
+        this.includeLabelsRegex = StringUtil.isNotEmpty(alarmRule.getIncludeLabelsRegex()) ?
+            Pattern.compile(alarmRule.getIncludeLabelsRegex()) : null;
+        this.excludeLabelsRegex = StringUtil.isNotEmpty(alarmRule.getExcludeLabelsRegex()) ?
+            Pattern.compile(alarmRule.getExcludeLabelsRegex()) : null;
         this.formatter = new AlarmMessageFormatter(alarmRule.getMessage());
+        this.onlyAsCondition = alarmRule.isOnlyAsCondition();
+        this.tags = alarmRule.getTags()
+                             .entrySet()
+                             .stream()
+                             .map(e -> new Tag(e.getKey(), e.getValue()))
+                             .collect(Collectors.toList());
     }
 
     /**
@@ -107,40 +130,8 @@ public class RunningRule {
         }
 
         final String metaName = meta.getName();
-        if (CollectionUtils.isNotEmpty(includeNames)) {
-            if (!includeNames.contains(metaName)) {
-                if (log.isTraceEnabled()) {
-                    log.trace("{} isn't in the including list {}", metaName, includeNames);
-                }
-                return;
-            }
-        }
-
-        if (CollectionUtils.isNotEmpty(excludeNames)) {
-            if (excludeNames.contains(metaName)) {
-                if (log.isTraceEnabled()) {
-                    log.trace("{} is in the excluding list {}", metaName, excludeNames);
-                }
-                return;
-            }
-        }
-
-        if (includeNamesRegex != null) {
-            if (!includeNamesRegex.matcher(metaName).matches()) {
-                if (log.isTraceEnabled()) {
-                    log.trace("{} doesn't match the include regex {}", metaName, includeNamesRegex);
-                }
-                return;
-            }
-        }
-
-        if (excludeNamesRegex != null) {
-            if (excludeNamesRegex.matcher(metaName).matches()) {
-                if (log.isTraceEnabled()) {
-                    log.trace("{} matches the exclude regex {}", metaName, excludeNamesRegex);
-                }
-                return;
-            }
+        if (!validate(metaName, includeNames, excludeNames, includeNamesRegex, excludeNamesRegex)) {
+            return;
         }
 
         if (valueType == null) {
@@ -156,6 +147,19 @@ public class RunningRule {
             } else if (metrics instanceof MultiIntValuesHolder) {
                 valueType = MetricsValueType.MULTI_INTS;
                 threshold.setType(MetricsValueType.MULTI_INTS);
+            } else if (metrics instanceof LabeledValueHolder) {
+                if (((LabeledValueHolder) metrics).getValue().keys().stream()
+                                                  .noneMatch(label -> validate(
+                                                      label,
+                                                      includeLabels,
+                                                      excludeLabels,
+                                                      includeLabelsRegex,
+                                                      excludeLabelsRegex
+                                                  ))) {
+                    return;
+                }
+                valueType = MetricsValueType.LABELED_LONG;
+                threshold.setType(MetricsValueType.LONG);
             } else {
                 log.warn("Unsupported value type {}", valueType);
                 return;
@@ -166,6 +170,50 @@ public class RunningRule {
             Window window = windows.computeIfAbsent(meta, ignored -> new Window(period));
             window.add(metrics);
         }
+    }
+
+    /**
+     * Validate target whether matching rules which is included list, excludes list, include regular expression or
+     * exclude regular expression.
+     */
+    private boolean validate(String target, List<String> includeList, List<String> excludeList,
+                             Pattern includeRegex, Pattern excludeRegex) {
+        if (CollectionUtils.isNotEmpty(includeList)) {
+            if (!includeList.contains(target)) {
+                if (log.isTraceEnabled()) {
+                    log.trace("{} isn't in the including list {}", target, includeList);
+                }
+                return false;
+            }
+        }
+
+        if (CollectionUtils.isNotEmpty(excludeList)) {
+            if (excludeList.contains(target)) {
+                if (log.isTraceEnabled()) {
+                    log.trace("{} is in the excluding list {}", target, excludeList);
+                }
+                return false;
+            }
+        }
+
+        if (includeRegex != null) {
+            if (!includeRegex.matcher(target).matches()) {
+                if (log.isTraceEnabled()) {
+                    log.trace("{} doesn't match the include regex {}", target, includeRegex);
+                }
+                return false;
+            }
+        }
+
+        if (excludeRegex != null) {
+            if (excludeRegex.matcher(target).matches()) {
+                if (log.isTraceEnabled()) {
+                    log.trace("{} matches the exclude regex {}", target, excludeRegex);
+                }
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -184,8 +232,9 @@ public class RunningRule {
         List<AlarmMessage> alarmMessageList = new ArrayList<>(30);
 
         windows.forEach((meta, window) -> {
-            AlarmMessage alarmMessage = window.checkAlarm();
-            if (alarmMessage != AlarmMessage.NONE) {
+            Optional<AlarmMessage> alarmMessageOptional = window.checkAlarm();
+            if (alarmMessageOptional.isPresent()) {
+                AlarmMessage alarmMessage = alarmMessageOptional.get();
                 alarmMessage.setScopeId(meta.getScopeId());
                 alarmMessage.setScope(meta.getScope());
                 alarmMessage.setName(meta.getName());
@@ -193,7 +242,10 @@ public class RunningRule {
                 alarmMessage.setId1(meta.getId1());
                 alarmMessage.setRuleName(this.ruleName);
                 alarmMessage.setAlarmMessage(formatter.format(meta));
+                alarmMessage.setOnlyAsCondition(this.onlyAsCondition);
                 alarmMessage.setStartTime(System.currentTimeMillis());
+                alarmMessage.setPeriod(this.period);
+                alarmMessage.setTags(this.tags);
                 alarmMessageList.add(alarmMessage);
             }
         });
@@ -208,7 +260,6 @@ public class RunningRule {
     public class Window {
         private LocalDateTime endTime;
         private int period;
-        private int counter;
         private int silenceCountdown;
 
         private LinkedList<Metrics> values;
@@ -218,7 +269,6 @@ public class RunningRule {
             this.period = period;
             // -1 means silence countdown is not running.
             silenceCountdown = -1;
-            counter = 0;
             init();
         }
 
@@ -272,7 +322,10 @@ public class RunningRule {
                     // too old data
                     // also should happen, but maybe if agent/probe mechanism time is not right.
                     if (log.isTraceEnabled()) {
-                        log.trace("Timebucket is {}, endTime is {} and value size is {}", timeBucket, this.endTime, values.size());
+                        log.trace(
+                            "Timebucket is {}, endTime is {} and value size is {}", timeBucket, this.endTime,
+                            values.size()
+                        );
                     }
                     return;
                 }
@@ -286,30 +339,23 @@ public class RunningRule {
             }
         }
 
-        public AlarmMessage checkAlarm() {
+        public Optional<AlarmMessage> checkAlarm() {
             if (isMatch()) {
                 /*
                  * When
-                 * 1. Metrics value threshold triggers alarm by rule
-                 * 2. Counter reaches the count threshold;
-                 * 3. Isn't in silence stage, judged by SilenceCountdown(!=0).
+                 * 1. Alarm trigger conditions are satisfied.
+                 * 2. Isn't in silence stage, judged by SilenceCountdown(!=0).
                  */
-                counter++;
-                if (counter >= countThreshold && silenceCountdown < 1) {
+                if (silenceCountdown < 1) {
                     silenceCountdown = silencePeriod;
-
-                    // set empty message, but new message
-                    return new AlarmMessage();
+                    return Optional.of(new AlarmMessage());
                 } else {
                     silenceCountdown--;
                 }
             } else {
                 silenceCountdown--;
-                if (counter > 0) {
-                    counter--;
-                }
             }
-            return AlarmMessage.NONE;
+            return Optional.empty();
         }
 
         private boolean isMatch() {
@@ -365,6 +411,21 @@ public class RunningRule {
                             }
                         }
                         break;
+                    case LABELED_LONG:
+                        DataTable values = ((LabeledValueHolder) metrics).getValue();
+                        lexpected = RunningRule.this.threshold.getLongThreshold();
+                        if (values.keys().stream().anyMatch(label ->
+                                                                validate(
+                                                                    label,
+                                                                    RunningRule.this.includeLabels,
+                                                                    RunningRule.this.excludeLabels,
+                                                                    RunningRule.this.includeLabelsRegex,
+                                                                    RunningRule.this.excludeLabelsRegex
+                                                                )
+                                                                    && op.test(lexpected, values.get(label)))) {
+                            matchCount++;
+                        }
+                        break;
                 }
             }
 
@@ -404,6 +465,13 @@ public class RunningRule {
                     int[] iArr = ((MultiIntValuesHolder) m).getValues();
                     r.add(new TraceLogMetric(m.getTimeBucket(), Arrays.stream(iArr).boxed().toArray(Number[]::new)));
                     break;
+                case LABELED_LONG:
+                    DataTable dt = ((LabeledValueHolder) m).getValue();
+                    TraceLogMetric l = new TraceLogMetric(
+                        m.getTimeBucket(), dt.sortedValues(Comparator.naturalOrder())
+                                             .toArray(new Number[0]));
+                    l.labels = dt.sortedKeys(Comparator.naturalOrder()).toArray(new String[0]);
+                    r.add(l);
             }
         });
         return r;
@@ -414,5 +482,6 @@ public class RunningRule {
     private static class TraceLogMetric {
         private final long timeBucket;
         private final Number[] value;
+        private String[] labels;
     }
 }
